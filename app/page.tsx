@@ -370,9 +370,14 @@ export default function Home() {
   return (
     <main className="min-h-screen bg-adipa-bg-light">
       <header className="bg-adipa-gradient py-8 px-4 text-center shadow-lg">
-        <div className="flex items-center justify-center gap-3 mb-2">
-          <ImageIcon className="text-white w-8 h-8" />
-          <h1 className="text-3xl font-bold text-white tracking-tight">Optimizador de Imágenes</h1>
+        {/* Logo en píldora blanca para contrastar con el gradiente */}
+        <div className="inline-block bg-white/95 rounded-2xl px-8 py-3 mb-4 shadow">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/logo-adipa.png" alt="ADIPA" className="h-10" />
+        </div>
+        <div className="flex items-center justify-center gap-2 mb-1">
+          <ImageIcon className="text-white w-6 h-6" />
+          <h1 className="text-2xl font-bold text-white tracking-tight">Optimizador de Imágenes</h1>
         </div>
         <p className="text-adipa-blue-light text-sm">Comunicaciones ADIPA · WebP · Tamaño configurable</p>
       </header>
