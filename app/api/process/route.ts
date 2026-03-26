@@ -80,42 +80,26 @@ export async function POST(req: NextRequest) {
       pipeline = sharp(buffer)
     }
 
-    // Find the quality whose output size is closest to targetBytes.
-    // Since size decreases monotonically as quality drops, we step down
-    // until we cross below the target, then compare the two neighbours.
+    // Scan quality 100 → 40 (step 5) and keep the result closest to targetBytes.
+    // Starting at 100 (not 85) fixes the case where the image is small enough
+    // that quality 85 is already below the target — we need to try higher
+    // qualities to get closer to the requested size.
+    // Early exit: once we've crossed below target AND the diff is growing, stop.
     const targetBytes = MAX_SIZE_BYTES
     let quality = 85
     let outputBuffer!: Buffer
+    let bestDiff = Infinity
 
-    let prevBuffer = await pipeline.clone().webp({ quality: 85 }).toBuffer()
-    let prevQuality = 85
-
-    if (prevBuffer.length <= targetBytes) {
-      // Already at or below target at max quality — return max quality
-      outputBuffer = prevBuffer
-    } else {
-      let found = false
-      for (let q = 80; q >= 40; q -= 5) {
-        const buf = await pipeline.clone().webp({ quality: q }).toBuffer()
-        if (buf.length <= targetBytes) {
-          // Crossed below target — pick whichever neighbour is closer
-          const aboveDiff = prevBuffer.length - targetBytes
-          const belowDiff = targetBytes - buf.length
-          if (belowDiff <= aboveDiff) {
-            outputBuffer = buf; quality = q
-          } else {
-            outputBuffer = prevBuffer; quality = prevQuality
-          }
-          found = true
-          break
-        }
-        prevBuffer = buf
-        prevQuality = q
-      }
-      if (!found) {
-        // Even quality 40 is above target — use quality 40 (smallest possible)
-        outputBuffer = await pipeline.clone().webp({ quality: 40 }).toBuffer()
-        quality = 40
+    for (let q = 100; q >= 40; q -= 5) {
+      const buf = await pipeline.clone().webp({ quality: q }).toBuffer()
+      const diff = Math.abs(buf.length - targetBytes)
+      if (diff <= bestDiff) {
+        bestDiff = diff
+        outputBuffer = buf
+        quality = q
+      } else if (buf.length < targetBytes) {
+        // Already below target and moving further away — no point continuing
+        break
       }
     }
 

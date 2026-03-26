@@ -477,7 +477,12 @@ export default function Home() {
 
               {result.outputSize > targetKB * 1024 && (
                 <p className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-                  No fue posible alcanzar {targetKB} KB ni al mínimo de calidad. El resultado es {formatBytes(result.outputSize)}.
+                  No fue posible reducirla a {targetKB} KB ni al mínimo de calidad. Resultado: {formatBytes(result.outputSize)}.
+                </p>
+              )}
+              {result.outputSize < targetKB * 1024 * 0.7 && (
+                <p className="text-xs text-sky-600 bg-sky-50 border border-sky-200 rounded-lg px-3 py-2">
+                  La imagen a máxima calidad pesa {formatBytes(result.outputSize)} — no es posible acercarse más a {targetKB} KB sin agregar datos artificiales.
                 </p>
               )}
 
