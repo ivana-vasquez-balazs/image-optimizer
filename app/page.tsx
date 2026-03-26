@@ -6,23 +6,62 @@ import {
   AlertCircle, CheckCircle2, Move, RefreshCw,
 } from 'lucide-react'
 
-type Preset = 'noticias' | 'ebooks' | 'cuadrada' | 'webp-only' | 'manual'
+// ─── Preset data ─────────────────────────────────────────────────────────────
 
 interface PresetOption {
-  id: Preset
+  id: string
   label: string
   desc: string
   w: number | null
   h: number | null
 }
 
-const PRESETS: PresetOption[] = [
-  { id: 'noticias',  label: 'Noticias',          desc: '796 × 348 px',    w: 796,  h: 348  },
-  { id: 'ebooks',    label: 'Ebooks / Recursos',  desc: '1280 × 960 px',  w: 1280, h: 960  },
-  { id: 'cuadrada',  label: 'Cuadrada',           desc: '1080 × 1080 px', w: 1080, h: 1080 },
-  { id: 'webp-only', label: 'Solo comprimir',     desc: 'Sin redimensionar', w: null, h: null },
-  { id: 'manual',    label: 'Personalizado',      desc: 'Tamaño manual',  w: null, h: null },
+interface PresetGroup {
+  category: string
+  presets: PresetOption[]
+}
+
+const PRESET_GROUPS: PresetGroup[] = [
+  {
+    category: 'Noticias',
+    presets: [
+      { id: 'noticias-dest',     label: 'Destacada / Interior', desc: '900 × 507 px', w: 900, h: 507 },
+      { id: 'noticias-lateral',  label: 'Banner lateral',       desc: '400 × 985 px', w: 400, h: 985 },
+      { id: 'noticias-cta-sq',   label: 'Banner CTA',           desc: '180 × 180 px', w: 180, h: 180 },
+      { id: 'noticias-cta-rect', label: 'Banner CTA',           desc: '180 × 200 px', w: 180, h: 200 },
+    ],
+  },
+  {
+    category: 'Recursos descargables',
+    presets: [
+      { id: 'recursos-dest',    label: 'Destacada / Header', desc: '700 × 493 px', w: 700, h: 493 },
+      { id: 'recursos-preview', label: 'Vista previa',       desc: '400 × 515 px', w: 400, h: 515 },
+    ],
+  },
+  {
+    category: 'Podcast',
+    presets: [
+      { id: 'podcast-dest',   label: 'Destacada',        desc: '580 × 386 px', w: 580, h: 386 },
+      { id: 'podcast-banner', label: 'Banner capítulo',  desc: '799 × 348 px', w: 799, h: 348 },
+    ],
+  },
+  {
+    category: 'Investigaciones',
+    presets: [
+      { id: 'invest-caja', label: 'Imagen caja', desc: '580 × 331 px', w: 580, h: 331 },
+    ],
+  },
+  {
+    category: 'General',
+    presets: [
+      { id: 'cuadrada',  label: 'Cuadrada',       desc: '1080 × 1080 px',   w: 1080, h: 1080 },
+      { id: 'webp-only', label: 'Solo comprimir', desc: 'Sin redimensionar', w: null, h: null },
+      { id: 'manual',    label: 'Personalizado',  desc: 'Tamaño manual',     w: null, h: null },
+    ],
+  },
 ]
+
+const ALL_PRESETS = PRESET_GROUPS.flatMap(g => g.presets)
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`
@@ -30,7 +69,7 @@ function formatBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(2)} MB`
 }
 
-// ─── Crop Preview ────────────────────────────────────────────────────────────
+// ─── Crop Preview ─────────────────────────────────────────────────────────────
 
 function CropPreview({
   src,
@@ -47,12 +86,10 @@ function CropPreview({
   const imgRef = useRef<HTMLImageElement>(null)
   const [naturalSize, setNaturalSize] = useState({ w: 0, h: 0 })
   const [containerW, setContainerW] = useState(0)
-  // crop top-left in display pixels
   const [pos, setPos] = useState({ x: 0, y: 0 })
   const dragging = useRef(false)
   const origin = useRef({ mx: 0, my: 0, px: 0, py: 0 })
 
-  // Track container width
   useEffect(() => {
     const el = containerRef.current
     if (!el) return
@@ -61,20 +98,16 @@ function CropPreview({
     return () => ro.disconnect()
   }, [])
 
-  // Display dimensions
   const imgAR = naturalSize.w > 0 ? naturalSize.w / naturalSize.h : 1
   const dispW = containerW
   const dispH = containerW > 0 ? Math.round(containerW / imgAR) : 0
 
-  // Crop overlay dimensions (fill image as much as possible at target AR)
   const cropAR = targetW / targetH
   let cropW: number, cropH: number
   if (cropAR > imgAR) {
-    cropW = dispW
-    cropH = Math.round(dispW / cropAR)
+    cropW = dispW; cropH = Math.round(dispW / cropAR)
   } else {
-    cropH = dispH
-    cropW = Math.round(dispH * cropAR)
+    cropH = dispH; cropW = Math.round(dispH * cropAR)
   }
 
   const maxX = Math.max(0, dispW - cropW)
@@ -82,13 +115,11 @@ function CropPreview({
   const cx = Math.max(0, Math.min(pos.x, maxX))
   const cy = Math.max(0, Math.min(pos.y, maxY))
 
-  // Re-center when dimensions change (e.g. on load or preset switch)
   useEffect(() => {
     if (dispW > 0 && dispH > 0) setPos({ x: maxX / 2, y: maxY / 2 })
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dispW, dispH, cropW, cropH])
 
-  // Report percentage to parent
   useEffect(() => {
     const px = maxX > 0 ? (cx / maxX) * 100 : 50
     const py = maxY > 0 ? (cy / maxY) * 100 : 50
@@ -96,7 +127,6 @@ function CropPreview({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cx, cy, maxX, maxY])
 
-  // Drag handlers
   const startDrag = (mx: number, my: number) => {
     dragging.current = true
     origin.current = { mx, my, px: cx, py: cy }
@@ -139,50 +169,35 @@ function CropPreview({
           alt="Previsualización"
           className="block w-full"
           onLoad={() => {
-            if (imgRef.current) {
+            if (imgRef.current)
               setNaturalSize({ w: imgRef.current.naturalWidth, h: imgRef.current.naturalHeight })
-            }
           }}
           draggable={false}
         />
 
-        {/* Crop handle – box-shadow darkens everything outside it */}
         {dispH > 0 && cropW > 0 && (
           <div
             className="absolute border-2 border-white cursor-move touch-none"
-            style={{
-              left: cx,
-              top: cy,
-              width: cropW,
-              height: cropH,
-              boxShadow: '0 0 0 9999px rgba(0,0,0,0.55)',
-            }}
+            style={{ left: cx, top: cy, width: cropW, height: cropH, boxShadow: '0 0 0 9999px rgba(0,0,0,0.55)' }}
             onMouseDown={(e) => { e.preventDefault(); startDrag(e.clientX, e.clientY) }}
             onTouchStart={(e) => startDrag(e.touches[0].clientX, e.touches[0].clientY)}
           >
-            {/* Rule-of-thirds grid */}
             <div className="absolute inset-0 grid grid-cols-3 grid-rows-3 pointer-events-none">
               {Array.from({ length: 9 }).map((_, i) => (
                 <div key={i} className="border border-white/20" />
               ))}
             </div>
-            {/* Center icon */}
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
               <Move className="text-white/50 w-6 h-6 drop-shadow" />
             </div>
-            {/* Corner handles */}
-            {[
-              'top-0 left-0 border-l-2 border-t-2',
-              'top-0 right-0 border-r-2 border-t-2',
-              'bottom-0 left-0 border-l-2 border-b-2',
-              'bottom-0 right-0 border-r-2 border-b-2',
+            {['top-0 left-0 border-l-2 border-t-2', 'top-0 right-0 border-r-2 border-t-2',
+              'bottom-0 left-0 border-l-2 border-b-2', 'bottom-0 right-0 border-r-2 border-b-2',
             ].map((cls, i) => (
               <div key={i} className={`absolute w-4 h-4 border-white ${cls}`} />
             ))}
           </div>
         )}
       </div>
-
       <p className="text-xs text-adipa-navy/50 text-center">
         Arrastrá el recuadro para elegir qué parte conservar
       </p>
@@ -193,31 +208,31 @@ function CropPreview({
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function Home() {
-  const [file, setFile]       = useState<File | null>(null)
-  const [preview, setPreview] = useState<string | null>(null)
-  const [preset, setPreset]   = useState<Preset>('noticias')
-  const [customW, setCustomW] = useState('')
-  const [customH, setCustomH] = useState('')
+  const [file, setFile]         = useState<File | null>(null)
+  const [preview, setPreview]   = useState<string | null>(null)
+  const [preset, setPreset]     = useState<string>('noticias-dest')
+  const [customW, setCustomW]   = useState('')
+  const [customH, setCustomH]   = useState('')
   const [isDragging, setIsDragging] = useState(false)
-  const [cropX, setCropX]     = useState(50)
-  const [cropY, setCropY]     = useState(50)
+  const [cropX, setCropX]       = useState(50)
+  const [cropY, setCropY]       = useState(50)
   const [targetKB, setTargetKB] = useState(100)
-  const [loading, setLoading] = useState(false)
-  const [error, setError]     = useState<string | null>(null)
-  const [result, setResult]   = useState<{
+  const [loading, setLoading]   = useState(false)
+  const [error, setError]       = useState<string | null>(null)
+  const [result, setResult]     = useState<{
     url: string; originalSize: number; outputSize: number; quality: number
   } | null>(null)
 
   const inputRef = useRef<HTMLInputElement>(null)
 
-  // Resolve target dimensions for the active preset
   const activeDims = (() => {
-    const p = PRESETS.find(p => p.id === preset)!
-    if (p.w && p.h) return { w: p.w, h: p.h }
     if (preset === 'manual') {
       const w = parseInt(customW, 10); const h = parseInt(customH, 10)
       if (w > 0 && h > 0) return { w, h }
+      return null
     }
+    const p = ALL_PRESETS.find(p => p.id === preset)
+    if (p?.w && p?.h) return { w: p.w, h: p.h }
     return null
   })()
 
@@ -273,14 +288,13 @@ export default function Home() {
           <ImageIcon className="text-white w-8 h-8" />
           <h1 className="text-3xl font-bold text-white tracking-tight">Optimizador de Imágenes</h1>
         </div>
-        <p className="text-adipa-blue-light text-sm">Comunicaciones ADIPA · WebP · Máximo 100 KB</p>
+        <p className="text-adipa-blue-light text-sm">Comunicaciones ADIPA · WebP · Tamaño configurable</p>
       </header>
 
       <div className="max-w-2xl mx-auto px-4 py-10 space-y-6">
 
         {/* ── Upload / Crop preview ── */}
         {!preview ? (
-          // Drop zone
           <div
             className={`rounded-2xl border-2 border-dashed transition-all cursor-pointer select-none
               ${isDragging
@@ -298,17 +312,14 @@ export default function Home() {
             </div>
           </div>
         ) : (
-          // Image loaded: show crop preview or plain preview
           <div className="space-y-2">
-            {/* File info bar */}
             <div className="flex items-center justify-between">
               <p className="text-xs text-adipa-navy/50 truncate max-w-[70%]">
                 {file?.name} · {formatBytes(file?.size ?? 0)}
               </p>
               <button
                 onClick={() => inputRef.current?.click()}
-                className="flex items-center gap-1.5 text-xs font-medium text-adipa-purple
-                  hover:text-adipa-purple-deep transition-colors"
+                className="flex items-center gap-1.5 text-xs font-medium text-adipa-purple hover:text-adipa-purple-deep transition-colors"
               >
                 <RefreshCw className="w-3.5 h-3.5" />
                 Cambiar imagen
@@ -324,7 +335,6 @@ export default function Home() {
                 onCropChange={(x, y) => { setCropX(x); setCropY(y) }}
               />
             ) : (
-              // webp-only or manual without dims: plain preview
               <div className="rounded-2xl overflow-hidden bg-white border border-adipa-cyan/40">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={preview} alt="Previsualización" className="w-full max-h-72 object-contain" />
@@ -346,29 +356,37 @@ export default function Home() {
           onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f) }}
         />
 
-        {/* ── Preset selector ── */}
-        <div>
-          <p className="text-sm font-semibold text-adipa-navy mb-3">Formato de salida</p>
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-            {PRESETS.map((p) => (
-              <button
-                key={p.id}
-                onClick={() => setPreset(p.id)}
-                className={`rounded-xl border-2 p-3 text-left transition-all
-                  ${preset === p.id
-                    ? 'border-adipa-purple bg-adipa-purple text-white shadow-md shadow-adipa-purple/30'
-                    : 'border-adipa-cyan/50 bg-white text-adipa-navy hover:border-adipa-purple'}`}
-              >
-                <p className="font-semibold text-sm">{p.label}</p>
-                <p className={`text-xs mt-0.5 ${preset === p.id ? 'text-white/80' : 'text-adipa-navy/50'}`}>
-                  {p.desc}
-                </p>
-              </button>
-            ))}
-          </div>
+        {/* ── Preset selector (grouped) ── */}
+        <div className="space-y-4">
+          <p className="text-sm font-semibold text-adipa-navy">Formato de salida</p>
+
+          {PRESET_GROUPS.map((group) => (
+            <div key={group.category}>
+              <p className="text-xs font-semibold text-adipa-purple uppercase tracking-wider mb-2">
+                {group.category}
+              </p>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                {group.presets.map((p) => (
+                  <button
+                    key={p.id}
+                    onClick={() => setPreset(p.id)}
+                    className={`rounded-xl border-2 p-3 text-left transition-all
+                      ${preset === p.id
+                        ? 'border-adipa-purple bg-adipa-purple text-white shadow-md shadow-adipa-purple/30'
+                        : 'border-adipa-cyan/50 bg-white text-adipa-navy hover:border-adipa-purple'}`}
+                  >
+                    <p className="font-semibold text-sm leading-tight">{p.label}</p>
+                    <p className={`text-xs mt-0.5 ${preset === p.id ? 'text-white/80' : 'text-adipa-navy/50'}`}>
+                      {p.desc}
+                    </p>
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
 
           {preset === 'manual' && (
-            <div className="mt-3 flex items-center gap-3">
+            <div className="flex items-center gap-3">
               <div className="flex-1">
                 <label className="text-xs text-adipa-navy/60 block mb-1">Ancho (px)</label>
                 <input
@@ -401,11 +419,7 @@ export default function Home() {
             <span className="text-sm font-bold text-adipa-purple">{targetKB} KB</span>
           </div>
           <input
-            type="range"
-            min={20}
-            max={100}
-            step={5}
-            value={targetKB}
+            type="range" min={20} max={100} step={5} value={targetKB}
             onChange={(e) => setTargetKB(Number(e.target.value))}
             className="w-full h-2 rounded-full appearance-none cursor-pointer
               bg-gradient-to-r from-adipa-purple to-adipa-blue

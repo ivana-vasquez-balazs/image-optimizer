@@ -4,9 +4,21 @@ import sharp from 'sharp'
 interface Dims { width: number; height: number }
 
 const PRESET_DIMS: Record<string, Dims> = {
-  noticias: { width: 796,  height: 348  },
-  ebooks:   { width: 1280, height: 960  },
-  cuadrada: { width: 1080, height: 1080 },
+  // Noticias
+  'noticias-dest':     { width: 900,  height: 507  },
+  'noticias-lateral':  { width: 400,  height: 985  },
+  'noticias-cta-sq':   { width: 180,  height: 180  },
+  'noticias-cta-rect': { width: 180,  height: 200  },
+  // Recursos descargables
+  'recursos-dest':     { width: 700,  height: 493  },
+  'recursos-preview':  { width: 400,  height: 515  },
+  // Podcast
+  'podcast-dest':      { width: 580,  height: 386  },
+  'podcast-banner':    { width: 799,  height: 348  },
+  // Investigaciones
+  'invest-caja':       { width: 580,  height: 331  },
+  // General
+  cuadrada:            { width: 1080, height: 1080 },
 }
 
 const DEFAULT_MAX_KB = 100
