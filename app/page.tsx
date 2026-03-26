@@ -179,10 +179,10 @@ function CropPreview({
   }
 
   // ── Corner handle ────────────────────────────────────────────────────────────
-  // L-shaped handle centered on each corner; visible above the white border.
-  // No overflow:hidden on container → handles can protrude safely.
-  const HANDLE = 14    // visual size px
-  const OFFSET = -7    // centres the handle on the corner (−HANDLE/2)
+  // Hit area (44 px) is separate from the visual dot (12 px) so it's easy
+  // to grab on both desktop and touch without being visually oversized.
+  const HIT = 44   // invisible grab area
+  const VIS = 12   // visible square
 
   type Side = 'top' | 'bottom'; type HSide = 'left' | 'right'
   const CornerHandle = ({
@@ -191,19 +191,26 @@ function CropPreview({
     <div
       style={{
         position: 'absolute',
-        [v]: OFFSET, [h]: OFFSET,
-        width: HANDLE, height: HANDLE,
-        background: 'white',
-        border: '2.5px solid #7D61F1',
-        borderRadius: 2,
+        [v]: -(HIT / 2), [h]: -(HIT / 2),
+        width: HIT, height: HIT,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
         cursor: kind === 'tl' ? 'nw-resize' : kind === 'tr' ? 'ne-resize'
               : kind === 'bl' ? 'sw-resize' : 'se-resize',
         zIndex: 20,
-        boxShadow: '0 1px 4px rgba(0,0,0,0.4)',
       }}
       onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); start(kind, e.clientX, e.clientY) }}
       onTouchStart={(e) => { e.stopPropagation(); start(kind, e.touches[0].clientX, e.touches[0].clientY) }}
-    />
+    >
+      {/* Visual indicator */}
+      <div style={{
+        width: VIS, height: VIS,
+        background: 'white',
+        border: '2.5px solid #7D61F1',
+        borderRadius: 2,
+        boxShadow: '0 1px 5px rgba(0,0,0,0.5)',
+        pointerEvents: 'none',
+      }} />
+    </div>
   )
 
   // ── Render ───────────────────────────────────────────────────────────────────
