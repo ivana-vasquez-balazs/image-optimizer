@@ -30,9 +30,11 @@ export async function POST(req: NextRequest) {
     const file   = formData.get('image') as File | null
     const preset = formData.get('preset') as string | null
 
-    // cropX/cropY: 0 = left/top edge, 100 = right/bottom edge (default centre = 50)
-    const cropX    = Math.max(0, Math.min(100, parseFloat((formData.get('cropX')    as string) ?? '50')))
-    const cropY    = Math.max(0, Math.min(100, parseFloat((formData.get('cropY')    as string) ?? '50')))
+    // Crop region as fractions of the original image (0–1). Default = full image.
+    const cropL = Math.max(0, Math.min(1, parseFloat((formData.get('cropL') as string) ?? '0')))
+    const cropT = Math.max(0, Math.min(1, parseFloat((formData.get('cropT') as string) ?? '0')))
+    const cropR = Math.max(0, Math.min(1, parseFloat((formData.get('cropR') as string) ?? '1')))
+    const cropB = Math.max(0, Math.min(1, parseFloat((formData.get('cropB') as string) ?? '1')))
     const targetKB = Math.max(20, Math.min(100, parseInt((formData.get('targetKB') as string) ?? String(DEFAULT_MAX_KB), 10)))
     const MAX_SIZE_BYTES = targetKB * 1024
 
@@ -65,27 +67,19 @@ export async function POST(req: NextRequest) {
     let pipeline: sharp.Sharp
 
     if (dims) {
-      const { width: targetW, height: targetH } = dims
-
-      // Read original size to compute scale factor
       const meta  = await sharp(buffer).metadata()
       const origW = meta.width  ?? 1
       const origH = meta.height ?? 1
 
-      // Scale so the image covers the target (same logic as fit:'cover')
-      const scale   = Math.max(targetW / origW, targetH / origH)
-      const scaledW = Math.max(targetW, Math.round(origW * scale))
-      const scaledH = Math.max(targetH, Math.round(origH * scale))
-
-      // Map cropX/Y percentage → pixel offset within the "overhang"
-      const maxLeft = scaledW - targetW
-      const maxTop  = scaledH - targetH
-      const left    = Math.round((cropX / 100) * maxLeft)
-      const top     = Math.round((cropY / 100) * maxTop)
+      // Extract the user-selected region, then resize to the target dimensions
+      const left   = Math.round(cropL * origW)
+      const top    = Math.round(cropT * origH)
+      const width  = Math.max(1, Math.round((cropR - cropL) * origW))
+      const height = Math.max(1, Math.round((cropB - cropT) * origH))
 
       pipeline = sharp(buffer)
-        .resize(scaledW, scaledH, { fit: 'fill' })
-        .extract({ left, top, width: targetW, height: targetH })
+        .extract({ left, top, width, height })
+        .resize(dims.width, dims.height, { fit: 'cover' })
         .sharpen({ sigma: 0.5 })
     } else {
       // webp-only: just convert, no resize/crop

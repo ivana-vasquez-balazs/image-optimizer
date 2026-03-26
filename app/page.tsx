@@ -9,17 +9,9 @@ import {
 // ─── Preset data ─────────────────────────────────────────────────────────────
 
 interface PresetOption {
-  id: string
-  label: string
-  desc: string
-  w: number | null
-  h: number | null
+  id: string; label: string; desc: string; w: number | null; h: number | null
 }
-
-interface PresetGroup {
-  category: string
-  presets: PresetOption[]
-}
+interface PresetGroup { category: string; presets: PresetOption[] }
 
 const PRESET_GROUPS: PresetGroup[] = [
   {
@@ -41,8 +33,8 @@ const PRESET_GROUPS: PresetGroup[] = [
   {
     category: 'Podcast',
     presets: [
-      { id: 'podcast-dest',   label: 'Destacada',        desc: '580 × 386 px', w: 580, h: 386 },
-      { id: 'podcast-banner', label: 'Banner capítulo',  desc: '799 × 348 px', w: 799, h: 348 },
+      { id: 'podcast-dest',   label: 'Destacada',       desc: '580 × 386 px', w: 580, h: 386 },
+      { id: 'podcast-banner', label: 'Banner capítulo', desc: '799 × 348 px', w: 799, h: 348 },
     ],
   },
   {
@@ -71,78 +63,105 @@ function formatBytes(bytes: number): string {
 
 // ─── Crop Preview ─────────────────────────────────────────────────────────────
 
+type DragKind = 'move' | 'tl' | 'tr' | 'bl' | 'br'
+interface Box { x: number; y: number; w: number; h: number }
+
 function CropPreview({
-  src,
-  targetW,
-  targetH,
+  src, targetW, targetH,
   onCropChange,
 }: {
   src: string
   targetW: number
   targetH: number
-  onCropChange: (x: number, y: number) => void
+  /** Reports (left, top, right, bottom) as fractions 0–1 of the original image */
+  onCropChange: (l: number, t: number, r: number, b: number) => void
 }) {
   const containerRef = useRef<HTMLDivElement>(null)
-  const imgRef = useRef<HTMLImageElement>(null)
-  const [naturalSize, setNaturalSize] = useState({ w: 0, h: 0 })
-  const [containerW, setContainerW] = useState(0)
-  const [pos, setPos] = useState({ x: 0, y: 0 })
-  const dragging = useRef(false)
-  const origin = useRef({ mx: 0, my: 0, px: 0, py: 0 })
+  const imgRef       = useRef<HTMLImageElement>(null)
+  const [nat, setNat]   = useState({ w: 0, h: 0 })
+  const [ctrW, setCtrW] = useState(0)
+  const [box, setBox]   = useState<Box>({ x: 0, y: 0, w: 0, h: 0 })
 
+  const drag = useRef<{ kind: DragKind; mx0: number; my0: number; box0: Box } | null>(null)
+
+  // Track container width via ResizeObserver
   useEffect(() => {
-    const el = containerRef.current
-    if (!el) return
-    const ro = new ResizeObserver(([e]) => setContainerW(e.contentRect.width))
+    const el = containerRef.current; if (!el) return
+    const ro = new ResizeObserver(([e]) => setCtrW(e.contentRect.width))
     ro.observe(el)
     return () => ro.disconnect()
   }, [])
 
-  const imgAR = naturalSize.w > 0 ? naturalSize.w / naturalSize.h : 1
-  const dispW = containerW
-  const dispH = containerW > 0 ? Math.round(containerW / imgAR) : 0
-
+  const imgAR  = nat.w > 0 ? nat.w / nat.h : 1
+  const dispW  = ctrW
+  const dispH  = ctrW > 0 ? Math.round(ctrW / imgAR) : 0
   const cropAR = targetW / targetH
-  let cropW: number, cropH: number
-  if (cropAR > imgAR) {
-    cropW = dispW; cropH = Math.round(dispW / cropAR)
-  } else {
-    cropH = dispH; cropW = Math.round(dispH * cropAR)
-  }
 
-  const maxX = Math.max(0, dispW - cropW)
-  const maxY = Math.max(0, dispH - cropH)
-  const cx = Math.max(0, Math.min(pos.x, maxX))
-  const cy = Math.max(0, Math.min(pos.y, maxY))
-
+  // Re-centre / re-fit when display dims or preset change
   useEffect(() => {
-    if (dispW > 0 && dispH > 0) setPos({ x: maxX / 2, y: maxY / 2 })
+    if (dispW <= 0 || dispH <= 0) return
+    let w = dispW, h = Math.round(w / cropAR)
+    if (h > dispH) { h = dispH; w = Math.round(h * cropAR) }
+    setBox({ x: Math.round((dispW - w) / 2), y: Math.round((dispH - h) / 2), w, h })
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dispW, dispH, cropW, cropH])
+  }, [dispW, dispH, cropAR])
 
+  // Report crop fractions to parent whenever box changes
   useEffect(() => {
-    const px = maxX > 0 ? (cx / maxX) * 100 : 50
-    const py = maxY > 0 ? (cy / maxY) * 100 : 50
-    onCropChange(px, py)
+    if (dispW <= 0 || dispH <= 0 || box.w <= 0) return
+    onCropChange(
+      box.x / dispW,
+      box.y / dispH,
+      (box.x + box.w) / dispW,
+      (box.y + box.h) / dispH,
+    )
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cx, cy, maxX, maxY])
+  }, [box, dispW, dispH])
 
-  const startDrag = (mx: number, my: number) => {
-    dragging.current = true
-    origin.current = { mx, my, px: cx, py: cy }
-  }
-  const moveDrag = useCallback((mx: number, my: number) => {
-    if (!dragging.current) return
-    setPos({
-      x: Math.max(0, Math.min(origin.current.px + mx - origin.current.mx, maxX)),
-      y: Math.max(0, Math.min(origin.current.py + my - origin.current.my, maxY)),
-    })
-  }, [maxX, maxY])
+  // ── Drag logic ──────────────────────────────────────────────────────────────
+
+  const applyDrag = useCallback((mx: number, my: number) => {
+    const d = drag.current; if (!d) return
+    const b0 = d.box0
+
+    if (d.kind === 'move') {
+      setBox(prev => ({
+        ...prev,
+        x: Math.max(0, Math.min(b0.x + mx - d.mx0, dispW - b0.w)),
+        y: Math.max(0, Math.min(b0.y + my - d.my0, dispH - b0.h)),
+      }))
+      return
+    }
+
+    // Resize: anchor = opposite corner (stays fixed while user drags this corner)
+    const ax = (d.kind === 'tl' || d.kind === 'bl') ? b0.x + b0.w : b0.x
+    const ay = (d.kind === 'tl' || d.kind === 'tr') ? b0.y + b0.h : b0.y
+
+    // Raw distance from anchor to mouse
+    let rw = Math.abs(mx - ax)
+    let rh = Math.abs(my - ay)
+
+    // Lock aspect ratio: use whichever dimension implies the larger box
+    if (rh * cropAR > rw) rw = rh * cropAR; else rh = rw / cropAR
+    rw = Math.max(30, rw); rh = rw / cropAR
+
+    // Top-left corner of the new box
+    let nx = (d.kind === 'tr' || d.kind === 'br') ? ax : ax - rw
+    let ny = (d.kind === 'bl' || d.kind === 'br') ? ay : ay - rh
+
+    // Clamp to image bounds
+    nx = Math.max(0, nx); ny = Math.max(0, ny)
+    if (nx + rw > dispW) { rw = dispW - nx; rh = rw / cropAR }
+    if (ny + rh > dispH) { rh = dispH - ny; rw = rh * cropAR }
+    rw = Math.max(20, rw); rh = rw / cropAR
+
+    setBox({ x: nx, y: ny, w: rw, h: rh })
+  }, [dispW, dispH, cropAR])
 
   useEffect(() => {
-    const up = () => { dragging.current = false }
-    const mm = (e: MouseEvent) => moveDrag(e.clientX, e.clientY)
-    const tm = (e: TouchEvent) => { e.preventDefault(); moveDrag(e.touches[0].clientX, e.touches[0].clientY) }
+    const up = () => { drag.current = null }
+    const mm = (e: MouseEvent) => applyDrag(e.clientX, e.clientY)
+    const tm = (e: TouchEvent) => { e.preventDefault(); applyDrag(e.touches[0].clientX, e.touches[0].clientY) }
     window.addEventListener('mouseup', up)
     window.addEventListener('mousemove', mm)
     window.addEventListener('touchend', up)
@@ -153,53 +172,103 @@ function CropPreview({
       window.removeEventListener('touchend', up)
       window.removeEventListener('touchmove', tm)
     }
-  }, [moveDrag])
+  }, [applyDrag])
+
+  const start = (kind: DragKind, mx: number, my: number) => {
+    drag.current = { kind, mx0: mx, my0: my, box0: { ...box } }
+  }
+
+  // ── Corner handle ────────────────────────────────────────────────────────────
+  // L-shaped handle centered on each corner; visible above the white border.
+  // No overflow:hidden on container → handles can protrude safely.
+  const HANDLE = 14    // visual size px
+  const OFFSET = -7    // centres the handle on the corner (−HANDLE/2)
+
+  type Side = 'top' | 'bottom'; type HSide = 'left' | 'right'
+  const CornerHandle = ({
+    kind, v, h,
+  }: { kind: 'tl' | 'tr' | 'bl' | 'br'; v: Side; h: HSide }) => (
+    <div
+      style={{
+        position: 'absolute',
+        [v]: OFFSET, [h]: OFFSET,
+        width: HANDLE, height: HANDLE,
+        background: 'white',
+        border: '2.5px solid #7D61F1',
+        borderRadius: 2,
+        cursor: kind === 'tl' ? 'nw-resize' : kind === 'tr' ? 'ne-resize'
+              : kind === 'bl' ? 'sw-resize' : 'se-resize',
+        zIndex: 20,
+        boxShadow: '0 1px 4px rgba(0,0,0,0.4)',
+      }}
+      onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); start(kind, e.clientX, e.clientY) }}
+      onTouchStart={(e) => { e.stopPropagation(); start(kind, e.touches[0].clientX, e.touches[0].clientY) }}
+    />
+  )
+
+  // ── Render ───────────────────────────────────────────────────────────────────
+  const showCrop = dispH > 0 && box.w > 0
+  // Overlay: 4 divs surround the crop box (no overflow:hidden needed)
+  const OV = 'absolute bg-black/55 pointer-events-none'
 
   return (
-    <div className="space-y-2">
-      <div
-        ref={containerRef}
-        className="relative overflow-hidden rounded-xl select-none bg-black"
-        style={{ height: dispH > 0 ? dispH : 'auto', minHeight: 80 }}
-      >
+    <div className="space-y-1">
+      {/* Container: position:relative, NO overflow:hidden → handles protrude */}
+      <div ref={containerRef} className="relative rounded-xl select-none bg-black"
+           style={{ height: dispH > 0 ? dispH : 'auto', minHeight: 80 }}>
+
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          ref={imgRef}
-          src={src}
-          alt="Previsualización"
-          className="block w-full"
+          ref={imgRef} src={src} alt="Previsualización"
+          className="block w-full rounded-xl"
           onLoad={() => {
-            if (imgRef.current)
-              setNaturalSize({ w: imgRef.current.naturalWidth, h: imgRef.current.naturalHeight })
+            if (imgRef.current) setNat({ w: imgRef.current.naturalWidth, h: imgRef.current.naturalHeight })
           }}
           draggable={false}
         />
 
-        {dispH > 0 && cropW > 0 && (
+        {showCrop && (<>
+          {/* Dark overlay – 4 surrounding strips */}
+          <div className={OV} style={{ top: 0, left: 0, right: 0, height: box.y }} />
+          <div className={OV} style={{ top: box.y + box.h, left: 0, right: 0, bottom: 0 }} />
+          <div className={OV} style={{ top: box.y, left: 0, width: box.x, height: box.h }} />
+          <div className={OV} style={{ top: box.y, left: box.x + box.w, right: 0, height: box.h }} />
+
+          {/* Crop box */}
           <div
-            className="absolute border-2 border-white cursor-move touch-none"
-            style={{ left: cx, top: cy, width: cropW, height: cropH, boxShadow: '0 0 0 9999px rgba(0,0,0,0.55)' }}
-            onMouseDown={(e) => { e.preventDefault(); startDrag(e.clientX, e.clientY) }}
-            onTouchStart={(e) => startDrag(e.touches[0].clientX, e.touches[0].clientY)}
+            className="absolute touch-none"
+            style={{
+              left: box.x, top: box.y, width: box.w, height: box.h,
+              border: '2px solid white',
+              cursor: 'move',
+              zIndex: 10,
+            }}
+            onMouseDown={(e) => { e.preventDefault(); start('move', e.clientX, e.clientY) }}
+            onTouchStart={(e) => start('move', e.touches[0].clientX, e.touches[0].clientY)}
           >
+            {/* Rule-of-thirds grid */}
             <div className="absolute inset-0 grid grid-cols-3 grid-rows-3 pointer-events-none">
               {Array.from({ length: 9 }).map((_, i) => (
                 <div key={i} className="border border-white/20" />
               ))}
             </div>
+
+            {/* Centre move icon */}
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-              <Move className="text-white/50 w-6 h-6 drop-shadow" />
+              <Move className="text-white/50 w-5 h-5 drop-shadow" />
             </div>
-            {['top-0 left-0 border-l-2 border-t-2', 'top-0 right-0 border-r-2 border-t-2',
-              'bottom-0 left-0 border-l-2 border-b-2', 'bottom-0 right-0 border-r-2 border-b-2',
-            ].map((cls, i) => (
-              <div key={i} className={`absolute w-4 h-4 border-white ${cls}`} />
-            ))}
+
+            {/* Corner handles */}
+            <CornerHandle kind="tl" v="top"    h="left"  />
+            <CornerHandle kind="tr" v="top"    h="right" />
+            <CornerHandle kind="bl" v="bottom" h="left"  />
+            <CornerHandle kind="br" v="bottom" h="right" />
           </div>
-        )}
+        </>)}
       </div>
+
       <p className="text-xs text-adipa-navy/50 text-center">
-        Arrastrá el recuadro para elegir qué parte conservar
+        Mover: arrastrá el interior · Redimensionar: arrastrá las esquinas (proporción bloqueada)
       </p>
     </div>
   )
@@ -208,14 +277,17 @@ function CropPreview({
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function Home() {
-  const [file, setFile]         = useState<File | null>(null)
-  const [preview, setPreview]   = useState<string | null>(null)
-  const [preset, setPreset]     = useState<string>('noticias-dest')
-  const [customW, setCustomW]   = useState('')
-  const [customH, setCustomH]   = useState('')
+  const [file, setFile]       = useState<File | null>(null)
+  const [preview, setPreview] = useState<string | null>(null)
+  const [preset, setPreset]   = useState<string>('noticias-dest')
+  const [customW, setCustomW] = useState('')
+  const [customH, setCustomH] = useState('')
   const [isDragging, setIsDragging] = useState(false)
-  const [cropX, setCropX]       = useState(50)
-  const [cropY, setCropY]       = useState(50)
+  // Crop region as fractions of the display image (0–1)
+  const [cropL, setCropL] = useState(0)
+  const [cropT, setCropT] = useState(0)
+  const [cropR, setCropR] = useState(1)
+  const [cropB, setCropB] = useState(1)
   const [targetKB, setTargetKB] = useState(100)
   const [loading, setLoading]   = useState(false)
   const [error, setError]       = useState<string | null>(null)
@@ -227,7 +299,7 @@ export default function Home() {
 
   const activeDims = (() => {
     if (preset === 'manual') {
-      const w = parseInt(customW, 10); const h = parseInt(customH, 10)
+      const w = parseInt(customW, 10), h = parseInt(customH, 10)
       if (w > 0 && h > 0) return { w, h }
       return null
     }
@@ -258,8 +330,10 @@ export default function Home() {
       const fd = new FormData()
       fd.append('image', file)
       fd.append('preset', preset)
-      fd.append('cropX', String(cropX))
-      fd.append('cropY', String(cropY))
+      fd.append('cropL', String(cropL))
+      fd.append('cropT', String(cropT))
+      fd.append('cropR', String(cropR))
+      fd.append('cropB', String(cropB))
       fd.append('targetKB', String(targetKB))
       if (preset === 'manual') { fd.append('width', customW); fd.append('height', customH) }
 
@@ -282,7 +356,6 @@ export default function Home() {
 
   return (
     <main className="min-h-screen bg-adipa-bg-light">
-      {/* Header */}
       <header className="bg-adipa-gradient py-8 px-4 text-center shadow-lg">
         <div className="flex items-center justify-center gap-3 mb-2">
           <ImageIcon className="text-white w-8 h-8" />
@@ -332,7 +405,7 @@ export default function Home() {
                 src={preview}
                 targetW={activeDims.w}
                 targetH={activeDims.h}
-                onCropChange={(x, y) => { setCropX(x); setCropY(y) }}
+                onCropChange={(l, t, r, b) => { setCropL(l); setCropT(t); setCropR(r); setCropB(b) }}
               />
             ) : (
               <div className="rounded-2xl overflow-hidden bg-white border border-adipa-cyan/40">
@@ -349,17 +422,13 @@ export default function Home() {
         )}
 
         <input
-          ref={inputRef}
-          type="file"
-          accept="image/*"
-          className="hidden"
+          ref={inputRef} type="file" accept="image/*" className="hidden"
           onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f) }}
         />
 
         {/* ── Preset selector (grouped) ── */}
         <div className="space-y-4">
           <p className="text-sm font-semibold text-adipa-navy">Formato de salida</p>
-
           {PRESET_GROUPS.map((group) => (
             <div key={group.category}>
               <p className="text-xs font-semibold text-adipa-purple uppercase tracking-wider mb-2">
@@ -424,17 +493,13 @@ export default function Home() {
             className="w-full h-2 rounded-full appearance-none cursor-pointer
               bg-gradient-to-r from-adipa-purple to-adipa-blue
               [&::-webkit-slider-thumb]:appearance-none
-              [&::-webkit-slider-thumb]:w-5
-              [&::-webkit-slider-thumb]:h-5
-              [&::-webkit-slider-thumb]:rounded-full
-              [&::-webkit-slider-thumb]:bg-white
-              [&::-webkit-slider-thumb]:border-2
-              [&::-webkit-slider-thumb]:border-adipa-purple
+              [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:h-5
+              [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white
+              [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-adipa-purple
               [&::-webkit-slider-thumb]:shadow-md"
           />
           <div className="flex justify-between text-xs text-adipa-navy/40 mt-1">
-            <span>20 KB</span>
-            <span>100 KB</span>
+            <span>20 KB</span><span>100 KB</span>
           </div>
         </div>
 
@@ -471,7 +536,6 @@ export default function Home() {
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={result.url} alt="Resultado"
                 className="w-full max-h-60 object-contain rounded-xl bg-adipa-bg-light" />
-
               <div className="grid grid-cols-3 gap-3 text-center">
                 <div className="bg-adipa-bg-light rounded-xl p-3">
                   <p className="text-xs text-adipa-navy/50 mb-1">Original</p>
@@ -488,7 +552,6 @@ export default function Home() {
                   </p>
                 </div>
               </div>
-
               {result.outputSize > targetKB * 1024 && (
                 <p className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
                   No fue posible reducirla a {targetKB} KB ni al mínimo de calidad. Resultado: {formatBytes(result.outputSize)}.
@@ -499,7 +562,6 @@ export default function Home() {
                   La imagen a máxima calidad pesa {formatBytes(result.outputSize)} — no es posible acercarse más a {targetKB} KB sin agregar datos artificiales.
                 </p>
               )}
-
               <a href={result.url} download="optimized.webp"
                 className="flex items-center justify-center gap-2 w-full py-3 rounded-xl
                   bg-adipa-gradient text-white font-semibold shadow-md shadow-adipa-purple/30
