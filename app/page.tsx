@@ -133,13 +133,19 @@ function CropPreview({
       return
     }
 
-    // Resize: anchor = opposite corner (stays fixed while user drags this corner)
+    // Resize: convert viewport coords → container coords before comparing with
+    // anchor (which is in container-relative pixels, not viewport pixels).
+    const rect = containerRef.current?.getBoundingClientRect()
+    const cmx = mx - (rect?.left ?? 0)
+    const cmy = my - (rect?.top  ?? 0)
+
+    // Anchor = opposite corner (stays fixed while user drags this corner)
     const ax = (d.kind === 'tl' || d.kind === 'bl') ? b0.x + b0.w : b0.x
     const ay = (d.kind === 'tl' || d.kind === 'tr') ? b0.y + b0.h : b0.y
 
-    // Raw distance from anchor to mouse
-    let rw = Math.abs(mx - ax)
-    let rh = Math.abs(my - ay)
+    // Raw distance from anchor to mouse (both now in container coords)
+    let rw = Math.abs(cmx - ax)
+    let rh = Math.abs(cmy - ay)
 
     // Lock aspect ratio: use whichever dimension implies the larger box
     if (rh * cropAR > rw) rw = rh * cropAR; else rh = rw / cropAR
