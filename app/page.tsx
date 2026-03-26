@@ -397,7 +397,7 @@ export default function Home() {
         {/* ── Target size slider ── */}
         <div>
           <div className="flex items-center justify-between mb-2">
-            <p className="text-sm font-semibold text-adipa-navy">Tamaño máximo de salida</p>
+            <p className="text-sm font-semibold text-adipa-navy">Tamaño de salida aproximado</p>
             <span className="text-sm font-bold text-adipa-purple">{targetKB} KB</span>
           </div>
           <input
@@ -475,9 +475,9 @@ export default function Home() {
                 </div>
               </div>
 
-              {result.outputSize > 100 * 1024 && (
+              {result.outputSize > targetKB * 1024 && (
                 <p className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-                  La imagen supera los 100 KB incluso al mínimo de calidad (40). Considera usar un tamaño menor.
+                  No fue posible alcanzar {targetKB} KB ni al mínimo de calidad. El resultado es {formatBytes(result.outputSize)}.
                 </p>
               )}
 

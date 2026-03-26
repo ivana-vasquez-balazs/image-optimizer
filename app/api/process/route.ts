@@ -80,18 +80,44 @@ export async function POST(req: NextRequest) {
       pipeline = sharp(buffer)
     }
 
-    // Smart compression: quality 85 → 40 in steps of 5 until ≤ 100 KB
+    // Find the quality whose output size is closest to targetBytes.
+    // Since size decreases monotonically as quality drops, we step down
+    // until we cross below the target, then compare the two neighbours.
+    const targetBytes = MAX_SIZE_BYTES
     let quality = 85
-    let outputBuffer: Buffer
+    let outputBuffer!: Buffer
 
-    do {
-      outputBuffer = await pipeline.clone().webp({ quality }).toBuffer()
-      if (outputBuffer.length <= MAX_SIZE_BYTES) break
-      quality -= 5
-    } while (quality >= 40)
+    let prevBuffer = await pipeline.clone().webp({ quality: 85 }).toBuffer()
+    let prevQuality = 85
 
-    if (outputBuffer.length > MAX_SIZE_BYTES)
-      outputBuffer = await pipeline.clone().webp({ quality: 40 }).toBuffer()
+    if (prevBuffer.length <= targetBytes) {
+      // Already at or below target at max quality — return max quality
+      outputBuffer = prevBuffer
+    } else {
+      let found = false
+      for (let q = 80; q >= 40; q -= 5) {
+        const buf = await pipeline.clone().webp({ quality: q }).toBuffer()
+        if (buf.length <= targetBytes) {
+          // Crossed below target — pick whichever neighbour is closer
+          const aboveDiff = prevBuffer.length - targetBytes
+          const belowDiff = targetBytes - buf.length
+          if (belowDiff <= aboveDiff) {
+            outputBuffer = buf; quality = q
+          } else {
+            outputBuffer = prevBuffer; quality = prevQuality
+          }
+          found = true
+          break
+        }
+        prevBuffer = buf
+        prevQuality = q
+      }
+      if (!found) {
+        // Even quality 40 is above target — use quality 40 (smallest possible)
+        outputBuffer = await pipeline.clone().webp({ quality: 40 }).toBuffer()
+        quality = 40
+      }
+    }
 
     return new NextResponse(new Uint8Array(outputBuffer), {
       status: 200,
