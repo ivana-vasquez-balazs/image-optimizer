@@ -7,6 +7,7 @@ const inter = Inter({ subsets: ['latin'] })
 export const metadata: Metadata = {
   title: 'Optimizador de Imágenes | Comunicaciones',
   description: 'Redimensiona y convierte imágenes a .webp — máximo 100 KB, alta calidad',
+  icons: { icon: '/logo-adipa.png' },
 }
 
 export default function RootLayout({
