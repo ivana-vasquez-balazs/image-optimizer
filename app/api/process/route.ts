@@ -9,7 +9,7 @@ const PRESET_DIMS: Record<string, Dims> = {
   cuadrada: { width: 1080, height: 1080 },
 }
 
-const MAX_SIZE_BYTES = 100 * 1024 // 100 KB
+const DEFAULT_MAX_KB = 100
 const MAX_FILE_BYTES = 4 * 1024 * 1024 // 4 MB
 
 export async function POST(req: NextRequest) {
@@ -19,8 +19,10 @@ export async function POST(req: NextRequest) {
     const preset = formData.get('preset') as string | null
 
     // cropX/cropY: 0 = left/top edge, 100 = right/bottom edge (default centre = 50)
-    const cropX = Math.max(0, Math.min(100, parseFloat((formData.get('cropX') as string) ?? '50')))
-    const cropY = Math.max(0, Math.min(100, parseFloat((formData.get('cropY') as string) ?? '50')))
+    const cropX    = Math.max(0, Math.min(100, parseFloat((formData.get('cropX')    as string) ?? '50')))
+    const cropY    = Math.max(0, Math.min(100, parseFloat((formData.get('cropY')    as string) ?? '50')))
+    const targetKB = Math.max(20, Math.min(100, parseInt((formData.get('targetKB') as string) ?? String(DEFAULT_MAX_KB), 10)))
+    const MAX_SIZE_BYTES = targetKB * 1024
 
     if (!file)   return NextResponse.json({ error: 'No se recibió ninguna imagen.' }, { status: 400 })
     if (!preset) return NextResponse.json({ error: 'Falta el parámetro preset.'    }, { status: 400 })

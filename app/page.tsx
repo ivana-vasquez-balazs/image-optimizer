@@ -201,6 +201,7 @@ export default function Home() {
   const [isDragging, setIsDragging] = useState(false)
   const [cropX, setCropX]     = useState(50)
   const [cropY, setCropY]     = useState(50)
+  const [targetKB, setTargetKB] = useState(100)
   const [loading, setLoading] = useState(false)
   const [error, setError]     = useState<string | null>(null)
   const [result, setResult]   = useState<{
@@ -244,6 +245,7 @@ export default function Home() {
       fd.append('preset', preset)
       fd.append('cropX', String(cropX))
       fd.append('cropY', String(cropY))
+      fd.append('targetKB', String(targetKB))
       if (preset === 'manual') { fd.append('width', customW); fd.append('height', customH) }
 
       const res = await fetch('/api/process', { method: 'POST', body: fd })
@@ -390,6 +392,36 @@ export default function Home() {
               </div>
             </div>
           )}
+        </div>
+
+        {/* ── Target size slider ── */}
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-sm font-semibold text-adipa-navy">Tamaño máximo de salida</p>
+            <span className="text-sm font-bold text-adipa-purple">{targetKB} KB</span>
+          </div>
+          <input
+            type="range"
+            min={20}
+            max={100}
+            step={5}
+            value={targetKB}
+            onChange={(e) => setTargetKB(Number(e.target.value))}
+            className="w-full h-2 rounded-full appearance-none cursor-pointer
+              bg-gradient-to-r from-adipa-purple to-adipa-blue
+              [&::-webkit-slider-thumb]:appearance-none
+              [&::-webkit-slider-thumb]:w-5
+              [&::-webkit-slider-thumb]:h-5
+              [&::-webkit-slider-thumb]:rounded-full
+              [&::-webkit-slider-thumb]:bg-white
+              [&::-webkit-slider-thumb]:border-2
+              [&::-webkit-slider-thumb]:border-adipa-purple
+              [&::-webkit-slider-thumb]:shadow-md"
+          />
+          <div className="flex justify-between text-xs text-adipa-navy/40 mt-1">
+            <span>20 KB</span>
+            <span>100 KB</span>
+          </div>
         </div>
 
         {/* ── Error ── */}
